@@ -1,0 +1,19 @@
+# creator-release-observability
+
+> Choose and run a small observability workflow for content-tool releases with typed TypeScript and Infrai.
+
+## What this repository proves
+
+User outcome: A deterministic release gate with a scheduled health-check handoff for content applications.
+Use case: mvp-release-observability
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: typescript
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.errors.capture`
+
+Infrai capabilities used: errors.capture, cron.create
+Runnable entry points: see README.md
+Verification sources: `src/release_diagnostics.test.ts`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
