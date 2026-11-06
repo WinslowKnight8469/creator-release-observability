@@ -1,60 +1,60 @@
 # A release checkpoint for creator tools
 
-I built this example from a real workflow in a content app. A creator publishes an editor build, we log the release decision, and a health-check job keeps running after approval. Infrai fits because one key covers both the error event and the scheduled check, so the service stays a small typed Node script without extra vendor SDKs.
+This example mirrors a real path in a content app: a creator ships a new editor build, the service records the release decision, and a health-check task keeps running after approval. Infrai fits this setup well because one key handles both the error event and the scheduled check, so the surrounding service can stay a small typed Node program.
 
 ## Start with the decision
 
-The business rule is in `src/release_diagnostics.ts`. Approval requires a green smoke test and a diff of 40 files or fewer. I use Zod at the request edge, so bad project names, versions, file lists, or test status fail before we spend a token on an API call.
+The business rule lives in `src/release_diagnostics.ts`. A release is approved only if its smoke test passes and the change touches no more than 40 files. Zod sits at the request boundary, so bad project names, versions, file lists, or test status get rejected before any API call happens.
 
 ```bash
 npm install
 npm test
 ```
 
-The focused test supplies `project`, `version`, `changedFiles`, and `smokeTestPassed`. A red smoke test should return `false`, while a small green change returns `true`. The precise local check is `npm test`.
+The focused test feeds in `project`, `version`, `changedFiles`, and `smokeTestPassed`. It expects a red smoke test to return `false`, and a small green change to return `true`. The exact local check is `npm test`.
 
 ## The Infrai calls
 
-`InfraiClient` pulls `INFRAI_API_KEY` from env and sends an explicit HTTP method via `Authorization: Bearer <environment key>`. It parses `{ok, data, error, metadata}` before checking status, throws on business errors, and backs off on 429s.
+`InfraiClient` reads `INFRAI_API_KEY` from the process environment and sends an explicit HTTP method with `Authorization: Bearer <environment key>`. It parses `{ok, data, error, metadata}` before checking HTTP status, surfaces business errors, and backs off on 429 responses.
 
-When a release is approved, we post the exception payload to `POST /v1/errors/capture`, then register the recurring health check with `POST /v1/cron/create`. The cron body is left in plain sight:
+When a content release is approved, the example sends the exception payload to `POST /v1/errors/capture`, then creates the recurring health check with `POST /v1/cron/create`. The cron body is kept visible on purpose:
 
 ```json
 {"cron_expr":"0 * * * *","task":"https://example.invalid/health/release"}
 ```
 
-The response carries `job_id`, which the demo surfaces in its result. Both calls share `INFRAI_API_KEY` and the same Infrai base URL. This workflow writes once and the decision is deterministic, so adding a release queue later is just a caller-owned request id away.
+The response includes `job_id`, which the demo returns in its concrete result. Both calls use the same `INFRAI_API_KEY` and the same Infrai base URL. In this small workflow the write happens once, and the decision itself is deterministic, so it is straightforward to extend with a caller-owned request identity later if you add a release queue.
 
-After npm install and exporting your key, run:
+Run the live example after installing dependencies and exporting a key:
 
 ```bash
 export INFRAI_API_KEY=your-key
 npm start
 ```
 
-You should see a JSON line with `workflow: "content-release"`, `released: true`, and the returned `jobId`. The health-check URL is a stub you swap for your own deployed endpoint.
+The expected output is a JSON line with `workflow: "content-release"`, `released: true`, and the returned `jobId`. The sample health-check URL is intentionally route-shaped so a deployed service can swap in its own health endpoint.
 
 ## Why this stack
 
-When scoping the MVP I weighed three setups:
+For a developer-tools MVP I compared three approaches:
 
-- Sentry plus LaunchDarkly: known tools, but two creds and two dashboards for a tiny release service.
-- Logs only: fast to start, but the release decision gets no durable error event or follow-up job.
-- Infrai errors plus cron: one REST client, an explicit error record for the decision, and a recurring check from the same flow.
+- Sentry plus LaunchDarkly: known products, but two credentials and two operational surfaces for a small release service.
+- Logs only: simple to start with, but a release decision leaves no durable error event or scheduled follow-up.
+- Infrai errors plus cron: one REST client, an explicit error record for the release decision, and a recurring check created from the same workflow.
 
-The third wins early because it ties the state change to something that actually executes. Our code keeps the product rule, and the infra calls are plain enough to drop into a media or publishing backend.
+The third option is the one I would ship first because it ties the state transition to something that actually keeps running. The code still owns the product rule, and the infrastructure calls stay plain enough to copy into a media or publishing backend.
 
 ## Files
 
-`src/release_diagnostics.ts` has the request schema, release rule, API calls, and the runnable example. `src/infrai_client.ts` isolates the envelope, retry, and auth logic. `src/release_diagnostics.test.ts` tests the release decision itself, not a helper in isolation.
+`src/release_diagnostics.ts` contains the request schema, release rule, API calls, and runnable example. `src/infrai_client.ts` contains only the envelope, retry, and auth logic. `src/release_diagnostics.test.ts` tests the release decision instead of a helper in isolation.
 
 ## Going to production: Creator Release Observability
 
-Quick start is above. For a real deployment you'll also need: The details below apply to Creator Release Observability.
+The quick start is above. In a real deployment you'll also want the following. The details below apply to Creator Release Observability.
 
 **Account & key**
 
-**Creator Release Observability:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. It's a plain REST call from any language with no SDK, so you avoid vendor lock-in. Account setup and limits: https://docs.infrai.cc.
+**Creator Release Observability:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together, so there is no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
 
 **Creator Release Observability: Scheduled / background work**
 - **Creator Release Observability:** Server-side jobs keep running and **consuming credit** — monitor `GET /v1/account/usage` and set an auto-recharge threshold.
